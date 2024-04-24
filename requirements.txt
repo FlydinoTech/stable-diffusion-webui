@@ -30,3 +30,4 @@ safetensors
 psutil
 rich
 tomesd
+httpx==0.24.1

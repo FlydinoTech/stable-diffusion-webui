@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from modules.shared import opts
 
 import modules.shared as shared
+import random
+import string
 
 
 current_task = None
@@ -41,24 +43,36 @@ def record_results(id_task, res):
         recorded_results.pop(0)
 
 
+def create_task_id(task_type):
+    N = 7
+    res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
+    return f"task({task_type}-{res})"
+
+
 def add_task_to_queue(id_job):
     pending_tasks[id_job] = time.time()
 
 
 class ProgressRequest(BaseModel):
-    id_task: str = Field(default=None, title="Task ID", description="id of the task to get progress for")
-    id_live_preview: int = Field(default=-1, title="Live preview image ID", description="id of last received last preview image")
+    id_task: str = Field(default=None, title="Task ID",
+                         description="id of the task to get progress for")
+    id_live_preview: int = Field(default=-1, title="Live preview image ID",
+                                 description="id of last received last preview image")
 
 
 class ProgressResponse(BaseModel):
     active: bool = Field(title="Whether the task is being worked on right now")
     queued: bool = Field(title="Whether the task is in queue")
     completed: bool = Field(title="Whether the task has already finished")
-    progress: float = Field(default=None, title="Progress", description="The progress with a range of 0 to 1")
+    progress: float = Field(default=None, title="Progress",
+                            description="The progress with a range of 0 to 1")
     eta: float = Field(default=None, title="ETA in secs")
-    live_preview: str = Field(default=None, title="Live preview image", description="Current live preview; a data: uri")
-    id_live_preview: int = Field(default=None, title="Live preview image ID", description="Send this together with next request to prevent receiving same image")
-    textinfo: str = Field(default=None, title="Info text", description="Info text used by WebUI.")
+    live_preview: str = Field(default=None, title="Live preview image",
+                              description="Current live preview; a data: uri")
+    id_live_preview: int = Field(default=None, title="Live preview image ID",
+                                 description="Send this together with next request to prevent receiving same image")
+    textinfo: str = Field(default=None, title="Info text",
+                          description="Info text used by WebUI.")
 
 
 def setup_progress_api(app):
@@ -87,7 +101,8 @@ def progressapi(req: ProgressRequest):
 
     elapsed_since_start = time.time() - shared.state.time_start
     predicted_duration = elapsed_since_start / progress if progress > 0 else None
-    eta = predicted_duration - elapsed_since_start if predicted_duration is not None else None
+    eta = predicted_duration - \
+        elapsed_since_start if predicted_duration is not None else None
 
     id_live_preview = req.id_live_preview
     shared.state.set_current_image()
@@ -106,8 +121,10 @@ def progressapi(req: ProgressRequest):
             else:
                 save_kwargs = {}
 
-            image.save(buffered, format=opts.live_previews_image_format, **save_kwargs)
-            base64_image = base64.b64encode(buffered.getvalue()).decode('ascii')
+            image.save(
+                buffered, format=opts.live_previews_image_format, **save_kwargs)
+            base64_image = base64.b64encode(
+                buffered.getvalue()).decode('ascii')
             live_preview = f"data:image/{opts.live_previews_image_format};base64,{base64_image}"
             id_live_preview = shared.state.id_live_preview
         else:
