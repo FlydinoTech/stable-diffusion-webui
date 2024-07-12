@@ -29,7 +29,9 @@ from modules import devices
 from typing import Dict, List, Any
 import piexif
 import piexif.helper
-
+import json
+import requests
+SLACK_WEBHOOK_URL="https://hooks.slack.com/services/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"
 
 def upscaler_to_index(name: str):
     try:
@@ -294,111 +296,122 @@ class Api:
         return script_args
 
     def text2imgapi(self, txt2imgreq: models.StableDiffusionTxt2ImgProcessingAPI):
-        script_runner = scripts.scripts_txt2img
-        if not script_runner.scripts:
-            script_runner.initialize_scripts(False)
-            ui.create_ui()
-        if not self.default_script_arg_txt2img:
-            self.default_script_arg_txt2img = self.init_default_script_args(script_runner)
-        selectable_scripts, selectable_script_idx = self.get_selectable_script(txt2imgreq.script_name, script_runner)
+        try:
+            self.send_slack("STABLE DIFFUSION", "Start render Text2img")
+            script_runner = scripts.scripts_txt2img
+            if not script_runner.scripts:
+                script_runner.initialize_scripts(False)
+                ui.create_ui()
+            if not self.default_script_arg_txt2img:
+                self.default_script_arg_txt2img = self.init_default_script_args(script_runner)
+            selectable_scripts, selectable_script_idx = self.get_selectable_script(txt2imgreq.script_name, script_runner)
 
-        populate = txt2imgreq.copy(update={  # Override __init__ params
-            "sampler_name": validate_sampler_name(txt2imgreq.sampler_name or txt2imgreq.sampler_index),
-            "do_not_save_samples": not txt2imgreq.save_images,
-            "do_not_save_grid": not txt2imgreq.save_images,
-        })
-        if populate.sampler_name:
-            populate.sampler_index = None  # prevent a warning later on
+            populate = txt2imgreq.copy(update={  # Override __init__ params
+                "sampler_name": validate_sampler_name(txt2imgreq.sampler_name or txt2imgreq.sampler_index),
+                "do_not_save_samples": not txt2imgreq.save_images,
+                "do_not_save_grid": not txt2imgreq.save_images,
+            })
+            if populate.sampler_name:
+                populate.sampler_index = None  # prevent a warning later on
 
-        args = vars(populate)
-        args.pop('script_name', None)
-        args.pop('script_args', None) # will refeed them to the pipeline directly after initializing them
-        args.pop('alwayson_scripts', None)
+            args = vars(populate)
+            args.pop('script_name', None)
+            args.pop('script_args', None) # will refeed them to the pipeline directly after initializing them
+            args.pop('alwayson_scripts', None)
 
-        script_args = self.init_script_args(txt2imgreq, self.default_script_arg_txt2img, selectable_scripts, selectable_script_idx, script_runner)
+            script_args = self.init_script_args(txt2imgreq, self.default_script_arg_txt2img, selectable_scripts, selectable_script_idx, script_runner)
 
-        send_images = args.pop('send_images', True)
-        args.pop('save_images', None)
+            send_images = args.pop('send_images', True)
+            args.pop('save_images', None)
 
-        with self.queue_lock:
-            p = StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)
-            p.scripts = script_runner
-            p.outpath_grids = opts.outdir_txt2img_grids
-            p.outpath_samples = opts.outdir_txt2img_samples
+            with self.queue_lock:
+                p = StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)
+                p.scripts = script_runner
+                p.outpath_grids = opts.outdir_txt2img_grids
+                p.outpath_samples = opts.outdir_txt2img_samples
 
-            shared.state.begin()
-            if selectable_scripts is not None:
-                p.script_args = script_args
-                processed = scripts.scripts_txt2img.run(p, *p.script_args) # Need to pass args as list here
-            else:
-                p.script_args = tuple(script_args) # Need to pass args as tuple here
-                processed = process_images(p)
-            shared.state.end()
+                shared.state.begin()
+                if selectable_scripts is not None:
+                    p.script_args = script_args
+                    processed = scripts.scripts_txt2img.run(p, *p.script_args) # Need to pass args as list here
+                else:
+                    p.script_args = tuple(script_args) # Need to pass args as tuple here
+                    processed = process_images(p)
+                shared.state.end()
 
-        b64images = list(map(encode_pil_to_base64, processed.images)) if send_images else []
+            b64images = list(map(encode_pil_to_base64, processed.images)) if send_images else []
 
-        return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=processed.js())
+            return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=processed.js())
+    
+        except Exception as e:
+            self.send_slack("STABLE DIFFUSION ERROR", str(e))
+            raise e
 
     def img2imgapi(self, img2imgreq: models.StableDiffusionImg2ImgProcessingAPI):
-        init_images = img2imgreq.init_images
-        if init_images is None:
-            raise HTTPException(status_code=404, detail="Init image not found")
+        try:
+            self.send_slack("STABLE DIFFUSION", "Start render Text2img")
+            init_images = img2imgreq.init_images
+            if init_images is None:
+                raise HTTPException(status_code=404, detail="Init image not found")
 
-        mask = img2imgreq.mask
-        if mask:
-            mask = decode_base64_to_image(mask)
+            mask = img2imgreq.mask
+            if mask:
+                mask = decode_base64_to_image(mask)
 
-        script_runner = scripts.scripts_img2img
-        if not script_runner.scripts:
-            script_runner.initialize_scripts(True)
-            ui.create_ui()
-        if not self.default_script_arg_img2img:
-            self.default_script_arg_img2img = self.init_default_script_args(script_runner)
-        selectable_scripts, selectable_script_idx = self.get_selectable_script(img2imgreq.script_name, script_runner)
+            script_runner = scripts.scripts_img2img
+            if not script_runner.scripts:
+                script_runner.initialize_scripts(True)
+                ui.create_ui()
+            if not self.default_script_arg_img2img:
+                self.default_script_arg_img2img = self.init_default_script_args(script_runner)
+            selectable_scripts, selectable_script_idx = self.get_selectable_script(img2imgreq.script_name, script_runner)
 
-        populate = img2imgreq.copy(update={  # Override __init__ params
-            "sampler_name": validate_sampler_name(img2imgreq.sampler_name or img2imgreq.sampler_index),
-            "do_not_save_samples": not img2imgreq.save_images,
-            "do_not_save_grid": not img2imgreq.save_images,
-            "mask": mask,
-        })
-        if populate.sampler_name:
-            populate.sampler_index = None  # prevent a warning later on
+            populate = img2imgreq.copy(update={  # Override __init__ params
+                "sampler_name": validate_sampler_name(img2imgreq.sampler_name or img2imgreq.sampler_index),
+                "do_not_save_samples": not img2imgreq.save_images,
+                "do_not_save_grid": not img2imgreq.save_images,
+                "mask": mask,
+            })
+            if populate.sampler_name:
+                populate.sampler_index = None  # prevent a warning later on
 
-        args = vars(populate)
-        args.pop('include_init_images', None)  # this is meant to be done by "exclude": True in model, but it's for a reason that I cannot determine.
-        args.pop('script_name', None)
-        args.pop('script_args', None)  # will refeed them to the pipeline directly after initializing them
-        args.pop('alwayson_scripts', None)
+            args = vars(populate)
+            args.pop('include_init_images', None)  # this is meant to be done by "exclude": True in model, but it's for a reason that I cannot determine.
+            args.pop('script_name', None)
+            args.pop('script_args', None)  # will refeed them to the pipeline directly after initializing them
+            args.pop('alwayson_scripts', None)
 
-        script_args = self.init_script_args(img2imgreq, self.default_script_arg_img2img, selectable_scripts, selectable_script_idx, script_runner)
+            script_args = self.init_script_args(img2imgreq, self.default_script_arg_img2img, selectable_scripts, selectable_script_idx, script_runner)
 
-        send_images = args.pop('send_images', True)
-        args.pop('save_images', None)
+            send_images = args.pop('send_images', True)
+            args.pop('save_images', None)
 
-        with self.queue_lock:
-            p = StableDiffusionProcessingImg2Img(sd_model=shared.sd_model, **args)
-            p.init_images = [decode_base64_to_image(x) for x in init_images]
-            p.scripts = script_runner
-            p.outpath_grids = opts.outdir_img2img_grids
-            p.outpath_samples = opts.outdir_img2img_samples
+            with self.queue_lock:
+                p = StableDiffusionProcessingImg2Img(sd_model=shared.sd_model, **args)
+                p.init_images = [decode_base64_to_image(x) for x in init_images]
+                p.scripts = script_runner
+                p.outpath_grids = opts.outdir_img2img_grids
+                p.outpath_samples = opts.outdir_img2img_samples
 
-            shared.state.begin()
-            if selectable_scripts is not None:
-                p.script_args = script_args
-                processed = scripts.scripts_img2img.run(p, *p.script_args) # Need to pass args as list here
-            else:
-                p.script_args = tuple(script_args) # Need to pass args as tuple here
-                processed = process_images(p)
-            shared.state.end()
+                shared.state.begin()
+                if selectable_scripts is not None:
+                    p.script_args = script_args
+                    processed = scripts.scripts_img2img.run(p, *p.script_args) # Need to pass args as list here
+                else:
+                    p.script_args = tuple(script_args) # Need to pass args as tuple here
+                    processed = process_images(p)
+                shared.state.end()
 
-        b64images = list(map(encode_pil_to_base64, processed.images)) if send_images else []
+            b64images = list(map(encode_pil_to_base64, processed.images)) if send_images else []
 
-        if not img2imgreq.include_init_images:
-            img2imgreq.init_images = None
-            img2imgreq.mask = None
+            if not img2imgreq.include_init_images:
+                img2imgreq.init_images = None
+                img2imgreq.mask = None
 
-        return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
+            return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
+        except Exception as e:
+            self.send_slack("STABLE DIFFUSION ERROR", str(e))
+            raise e
 
     def extras_single_image_api(self, req: models.ExtrasSingleImageRequest):
         reqDict = setUpscalers(req)
@@ -701,3 +714,19 @@ class Api:
     def launch(self, server_name, port):
         self.app.include_router(self.router)
         uvicorn.run(self.app, host=server_name, port=port)
+
+    def send_slack(self, title ='', error =''):
+        payload = {
+            'text': f'*{title}*\n{str(error)}'
+        }
+
+        response = requests.post(
+                SLACK_WEBHOOK_URL, data=json.dumps(payload),
+                headers={'Content-Type': 'application/json'}
+            )
+
+        if response.status_code != 200:
+            raise ValueError(
+                'Request to Slack webhook returned an error %s, the response is:\n%s'
+                % (response.status_code, response.text)
+            )
