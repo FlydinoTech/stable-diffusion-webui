@@ -348,6 +348,8 @@ class Api:
         return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=processed.js())
 
     def img2imgapi(self, img2imgreq: models.StableDiffusionImg2ImgProcessingAPI):
+        start_time = datetime.datetime.now()
+        print("Start time:", start_time.strftime("%H:%M:%S"))
         init_images = img2imgreq.init_images
         if init_images is None:
             raise HTTPException(status_code=404, detail="Init image not found")
@@ -405,6 +407,9 @@ class Api:
         if not img2imgreq.include_init_images:
             img2imgreq.init_images = None
             img2imgreq.mask = None
+
+        end_time = datetime.datetime.now()
+        print("End time:", end_time.strftime("%H:%M:%S"))
 
         return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
 
