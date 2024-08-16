@@ -404,10 +404,6 @@ class Api:
 
         b64images = list(map(encode_pil_to_base64, processed.images)) if send_images else []
 
-        if not img2imgreq.include_init_images:
-            img2imgreq.init_images = None
-            img2imgreq.mask = None
-
         end_time = datetime.datetime.now()
         print("End time:", end_time.strftime("%H:%M:%S"))
 
@@ -416,6 +412,10 @@ class Api:
         seconds = duration.total_seconds()
 
         print(f"Số giây render ảnh AI: {seconds} giây")
+
+        if not img2imgreq.include_init_images:
+            img2imgreq.init_images = None
+            img2imgreq.mask = None
 
         return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
 
