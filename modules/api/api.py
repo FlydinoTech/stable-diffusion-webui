@@ -411,6 +411,12 @@ class Api:
         end_time = datetime.datetime.now()
         print("End time:", end_time.strftime("%H:%M:%S"))
 
+        # Tính số giây giữa hai thời điểm
+        duration = end_time - start_time
+        seconds = duration.total_seconds()
+
+        print(f"Số giây render ảnh AI: {seconds} giây")
+
         return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
 
     def extras_single_image_api(self, req: models.ExtrasSingleImageRequest):
