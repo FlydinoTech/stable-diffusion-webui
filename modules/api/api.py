@@ -244,6 +244,7 @@ class Api:
         self.add_api_route("/sdapi/v1/scripts", self.get_scripts_list, methods=["GET"], response_model=models.ScriptsList)
         self.add_api_route("/sdapi/v1/script-info", self.get_script_info, methods=["GET"], response_model=list[models.ScriptInfo])
         self.add_api_route("/sdapi/v1/extensions", self.get_extensions_list, methods=["GET"], response_model=list[models.ExtensionItem])
+        self.add_api_route("/sdapi/v1/check-status", self.check_status, methods=["GET"])
 
         if shared.cmd_opts.api_server_stop:
             self.add_api_route("/sdapi/v1/server-kill", self.kill_webui, methods=["POST"])
@@ -252,6 +253,7 @@ class Api:
 
         self.default_script_arg_txt2img = []
         self.default_script_arg_img2img = []
+        self.check_working_status = False
 
         txt2img_script_runner = scripts.scripts_txt2img
         img2img_script_runner = scripts.scripts_img2img
@@ -490,6 +492,8 @@ class Api:
         return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=processed.js())
 
     def img2imgapi(self, img2imgreq: models.StableDiffusionImg2ImgProcessingAPI):
+        
+        self.check_working_status = True
         task_id = img2imgreq.force_task_id or create_task_id("img2img")
 
         init_images = img2imgreq.init_images
@@ -562,7 +566,11 @@ class Api:
             img2imgreq.init_images = None
             img2imgreq.mask = None
 
+        self.check_working_status = False
         return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
+    
+    def check_status(self):
+        return {"status": self.check_working_status}
 
     def extras_single_image_api(self, req: models.ExtrasSingleImageRequest):
         reqDict = setUpscalers(req)
