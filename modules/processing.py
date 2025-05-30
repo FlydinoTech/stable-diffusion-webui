@@ -180,6 +180,7 @@ class StableDiffusionProcessing:
     token_merging_ratio_hr = 0
     disable_extra_networks: bool = False
     firstpass_image: Image = None
+    face_image_reactor_cache_url: str = None
 
     scripts_value: scripts.ScriptRunner = field(default=None, init=False)
     script_args_value: list = field(default=None, init=False)
@@ -567,7 +568,7 @@ class Processed:
         self.all_subseeds = all_subseeds or p.all_subseeds or [self.subseed]
         self.infotexts = infotexts or [info] * len(images_list)
         self.version = program_version()
-
+        self.name_file_cache = p.face_image_reactor_cache_url
     def js(self):
         obj = {
             "prompt": self.all_prompts[0],
